@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Chakra Petch", monospace;
+  --font-body: "Sora", sans-serif;
+}
+
+html,
+body {
+  background: #05070f;
+  color: #e2f6fb;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Cosmic frozen void: layered radial nebulae + faint grid, fixed behind everything. */
+.cosmic-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(900px 600px at 18% 12%, rgba(0, 194, 255, 0.16), transparent 60%),
+    radial-gradient(700px 700px at 85% 20%, rgba(103, 232, 249, 0.1), transparent 60%),
+    radial-gradient(800px 800px at 50% 100%, rgba(34, 211, 238, 0.12), transparent 65%),
+    #05070f;
+}
+.cosmic-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 30%, transparent 80%);
+}
+
+/* Glass surfaces */
+.glass {
+  background: linear-gradient(
+    160deg,
+    rgba(17, 24, 39, 0.72),
+    rgba(7, 10, 20, 0.65)
+  );
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  backdrop-filter: blur(14px);
+}
+.glass-strong {
+  background: linear-gradient(160deg, rgba(17, 24, 39, 0.92), rgba(7, 10, 20, 0.92));
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  backdrop-filter: blur(20px);
+}
+
+.text-glow {
+  text-shadow: 0 0 18px rgba(34, 211, 238, 0.55);
+}
+
+/* Holographic chessboard frame */
+.board-frame {
+  border-radius: 18px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(34, 211, 238, 0.12), rgba(7, 10, 20, 0.4));
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.15),
+    0 0 60px -10px rgba(34, 211, 238, 0.5),
+    inset 0 0 40px -20px rgba(103, 232, 249, 0.4);
+}
+
+/* Frost particles */
+.particles span {
+  position: absolute;
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(207, 250, 254, 0.8);
+  box-shadow: 0 0 8px rgba(103, 232, 249, 0.9);
+  animation: floatUp linear infinite;
+}
+@keyframes floatUp {
+  from { transform: translateY(20px); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  to { transform: translateY(-110vh); opacity: 0; }
+}
+
+button { cursor: pointer; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #070a14; }
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.3);
+  border-radius: 9999px;
+}

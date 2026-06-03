@@ -1,0 +1,9 @@
+[package]
+name = "eternal_chess"
+edition = "2024.beta"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+
+[addresses]
+eternal_chess = "0x0"
