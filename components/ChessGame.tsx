@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
-import { Chess } from "chess.js";
+import { Chess, Square } from "chess.js";
 import { motion } from "framer-motion";
 import { Bot, Users, RotateCcw, Sparkles, Wifi } from "lucide-react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
@@ -242,7 +242,7 @@ export function ChessGame() {
       const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
       if (!myTurn) return;
     }
-    const moves = g.moves({ square, verbose: true });
+    const moves = g.moves({ square: square as Square, verbose: true });
     if (moves.length === 0) { setOptionSquares({}); setSelectedSquare(null); return; }
     setSelectedSquare(square);
     const highlights: Record<string, object> = {};
@@ -268,7 +268,7 @@ export function ChessGame() {
     if (mode === "online") {
       // Validate locally first (for visual feedback), then confirm server-side
       const g = gameRef.current;
-      const legalMoves = g.moves({ square: selectedSquare, verbose: true });
+      const legalMoves = g.moves({ square: selectedSquare as Square, verbose: true });
       const isLegal = legalMoves.some((m) => m.to === square);
       if (!isLegal) return;
       await submitOnlineMove(selectedSquare, square);
