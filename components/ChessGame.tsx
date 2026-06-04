@@ -279,16 +279,26 @@ export function ChessGame() {
     if (moved && mode === "ai" && !gameRef.current.isGameOver()) triggerAiMove();
   }, [selectedSquare, tryMove, mode, triggerAiMove, submitOnlineMove]);
 
-  // ── Piece drop ────────────────────────────────────────────────────────────
-  const onPieceDrop = useCallback(async (source: string, target: string) => {
+// ── Piece drop ────────────────────────────────────────────────────────────
+  const onPieceDrop = useCallback((source: Square, target: Square) => {
     const g = gameRef.current;
-    setOptionSquares({}); setSelectedSquare(null);
+    setOptionSquares({}); 
+    setSelectedSquare(null);
 
     if (mode === "online") {
       const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
       if (!myTurn) return false;
-      const ok = await submitOnlineMove(source, target);
-      return ok ?? false;
+
+      // Validate the move locally first so the piece snaps instantly
+      const legalMoves = g.moves({ square: source, verbose: true });
+      const isLegal = legalMoves.some((m) => m.to === target);
+
+      if (isLegal) {
+        // Fire the server sync in the background (no await needed)
+        submitOnlineMove(source, target);
+        return true;
+      }
+      return false;
     }
 
     if (mode === "ai" && g.turn() !== "w") return false;
