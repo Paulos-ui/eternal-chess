@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import { Chess, Square } from "chess.js";
-import { motion } from "framer-motion";
 import { Bot, Users, RotateCcw, Sparkles, Wifi } from "lucide-react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { pickAiMove, type Difficulty } from "@/lib/chess-ai";
@@ -25,8 +24,8 @@ export interface FinishedGame {
   moveCount: number;
   white: string;
   black: string;
-  isOnlineWin?: boolean;   // true if this player won an online match
-  isOnline?: boolean;      // true if game was played online (even a draw)
+  isOnlineWin?: boolean;
+  isOnline?: boolean;
 }
 
 export function ChessGame() {
@@ -52,12 +51,12 @@ export function ChessGame() {
   const [myColor, setMyColor] = useState<"white" | "black">("white");
   const [opponentConnected, setOpponentConnected] = useState(false);
 
-  // Responsive board sizing
+  // Responsive board sizing (Updated to 800px max)
   useEffect(() => {
     const el = boardRef.current?.parentElement;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      const w = Math.min(el.clientWidth - 28, 560);
+      const w = Math.min(el.clientWidth - 32, 800);
       setBoardWidth(Math.max(280, w));
     });
     ro.observe(el);
@@ -211,7 +210,7 @@ export function ChessGame() {
       });
       const data = await res.json();
       if (!res.ok) { console.error(data.error); return false; }
-      // Optimistically apply move locally (Pusher will confirm to opponent)
+      
       const g = gameRef.current;
       if (data.pgn) g.loadPgn(data.pgn);
       setFen(g.fen());
@@ -234,8 +233,8 @@ export function ChessGame() {
     return true;
   }, [computeStatus, finishIfOver]);
 
-  // ── Piece click → show valid squares ─────────────────────────────────────
-  const onPieceClick = useCallback((piece: string, square: string) => {
+  // ── Show valid squares (Click or Drag) ───────────────────────────────────
+  const showHighlights = useCallback((square: string) => {
     const g = gameRef.current;
     if (mode === "ai" && g.turn() !== "w") return;
     if (mode === "online") {
@@ -244,34 +243,37 @@ export function ChessGame() {
     }
     const moves = g.moves({ square: square as Square, verbose: true });
     if (moves.length === 0) { setOptionSquares({}); setSelectedSquare(null); return; }
+    
     setSelectedSquare(square);
     const highlights: Record<string, object> = {};
     moves.forEach((m) => {
       highlights[m.to] = {
-        background: g.get(m.to)
-          ? "radial-gradient(circle, rgba(103,232,249,0.55) 80%, transparent 80%)"
-          : "radial-gradient(circle, rgba(103,232,249,0.4) 28%, transparent 28%)",
+        background: g.get(m.to as Square)
+          ? "radial-gradient(circle, rgba(255,255,255,0.7) 80%, transparent 80%)"
+          : "radial-gradient(circle, rgba(255,255,255,0.3) 25%, transparent 25%)",
         borderRadius: "50%",
       };
     });
-    highlights[square] = { background: "rgba(103,232,249,0.2)" };
+    highlights[square] = { background: "rgba(255,255,255,0.2)" };
     setOptionSquares(highlights);
   }, [mode, myColor]);
 
+  const onPieceClick = useCallback((piece: string, square: string) => showHighlights(square), [showHighlights]);
+  const onPieceDragBegin = useCallback((piece: string, sourceSquare: string) => showHighlights(sourceSquare), [showHighlights]);
+
   // ── Square click → complete move ─────────────────────────────────────────
-  const onSquareClick = useCallback(async (square: string) => {
+  const onSquareClick = useCallback((square: string) => {
     if (!selectedSquare || selectedSquare === square) {
       setOptionSquares({}); setSelectedSquare(null); return;
     }
     setOptionSquares({}); setSelectedSquare(null);
 
     if (mode === "online") {
-      // Validate locally first (for visual feedback), then confirm server-side
       const g = gameRef.current;
       const legalMoves = g.moves({ square: selectedSquare as Square, verbose: true });
       const isLegal = legalMoves.some((m) => m.to === square);
       if (!isLegal) return;
-      await submitOnlineMove(selectedSquare, square);
+      submitOnlineMove(selectedSquare, square);
       return;
     }
 
@@ -279,7 +281,7 @@ export function ChessGame() {
     if (moved && mode === "ai" && !gameRef.current.isGameOver()) triggerAiMove();
   }, [selectedSquare, tryMove, mode, triggerAiMove, submitOnlineMove]);
 
-// ── Piece drop ────────────────────────────────────────────────────────────
+  // ── Piece drop ────────────────────────────────────────────────────────────
   const onPieceDrop = useCallback((source: Square, target: Square) => {
     const g = gameRef.current;
     setOptionSquares({}); 
@@ -289,12 +291,10 @@ export function ChessGame() {
       const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
       if (!myTurn) return false;
 
-      // Validate the move locally first so the piece snaps instantly
       const legalMoves = g.moves({ square: source, verbose: true });
       const isLegal = legalMoves.some((m) => m.to === target);
 
       if (isLegal) {
-        // Fire the server sync in the background (no await needed)
         submitOnlineMove(source, target);
         return true;
       }
@@ -326,13 +326,12 @@ export function ChessGame() {
     if (m === "online") setShowLobby(true);
   }, [reset]);
 
-  // ── Board orientation ─────────────────────────────────────────────────────
   const boardOrientation = mode === "online" && myColor === "black" ? "black" : "white";
 
   return (
     <div className="flex w-full flex-col items-center gap-5">
       {/* Mode bar */}
-      <div className="flex w-full max-w-[560px] flex-wrap items-center justify-between gap-3">
+      <div className="flex w-full max-w-[800px] flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-xl glass p-1">
           <ModeBtn active={mode === "ai"} onClick={() => switchMode("ai")}>
             <Bot className="h-4 w-4" /> vs AI
@@ -345,7 +344,6 @@ export function ChessGame() {
           </ModeBtn>
         </div>
 
-        {/* Difficulty — AI mode only */}
         {mode === "ai" && (
           <div className="flex rounded-xl glass p-1">
             {(["easy", "medium", "hard"] as Difficulty[]).map((d) => (
@@ -362,7 +360,6 @@ export function ChessGame() {
           </div>
         )}
 
-        {/* Online: room code badge */}
         {mode === "online" && room && (
           <div className="flex items-center gap-2 rounded-xl glass px-3 py-2">
             <span className="font-display text-xs text-ice-frost/50 tracking-widest uppercase">Room</span>
@@ -383,12 +380,11 @@ export function ChessGame() {
         <OnlineRoom onReady={startOnlineGame} />
       )}
 
-      {/* Board — hide until online game is ready */}
+      {/* Board */}
       {(!showLobby || (mode !== "online")) && (
         <>
-          {/* Online: opponent info */}
           {mode === "online" && room && (
-            <div className="flex w-full max-w-[560px] items-center justify-between rounded-xl glass px-4 py-2">
+            <div className="flex w-full max-w-[800px] items-center justify-between rounded-xl glass px-4 py-2">
               <PlayerTag
                 address={myColor === "white" ? room.hostAddress : room.guestAddress ?? "?"}
                 label="You"
@@ -403,17 +399,13 @@ export function ChessGame() {
             </div>
           )}
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="board-frame animate-drift"
-          >
-            <div ref={boardRef}>
+          <div className="board-frame w-full flex justify-center">
+            <div ref={boardRef} className="w-full max-w-[800px]">
               <Chessboard
                 position={fen}
                 onPieceDrop={onPieceDrop}
                 onPieceClick={onPieceClick}
+                onPieceDragBegin={onPieceDragBegin}
                 onSquareClick={onSquareClick}
                 boardOrientation={boardOrientation}
                 boardWidth={boardWidth}
@@ -421,11 +413,11 @@ export function ChessGame() {
                 customBoardStyle={{ borderRadius: "10px" }}
                 customDarkSquareStyle={{ backgroundColor: "#0e2a3a" }}
                 customLightSquareStyle={{ backgroundColor: "#16415a" }}
-                customDropSquareStyle={{ boxShadow: "inset 0 0 0 3px rgba(103,232,249,0.9)" }}
+                customDropSquareStyle={{ boxShadow: "inset 0 0 0 3px rgba(255,255,255,0.9)" }}
                 customSquareStyles={optionSquares}
               />
             </div>
-          </motion.div>
+          </div>
 
           <p className="font-display text-sm tracking-widest text-ice-frost/70">{status}</p>
 
