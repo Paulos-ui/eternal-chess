@@ -302,23 +302,33 @@ export function ChessGame() {
     // Handled entirely by onSquareClick — no-op here to avoid duplicate calls
   }, []);
 
-  // ── Drag and drop still works alongside click-to-move ────────────────────
-  const onPieceDrop = useCallback(async (source: string, target: string) => {
+// ── Piece drop ────────────────────────────────────────────────────────────
+  const onPieceDrop = useCallback((source: Square, target: Square) => {
     const g = gameRef.current;
-    setOptionSquares({});
+    setOptionSquares({}); 
     setSelectedSquare(null);
 
-    if (!isMyTurn()) return false;
-
     if (mode === "online") {
-      const ok = await submitOnlineMove(source, target);
-      return ok ?? false;
+      const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
+      if (!myTurn) return false;
+
+      const legalMoves = g.moves({ square: source, verbose: true });
+      const isLegal = legalMoves.some((m) => m.to === target);
+
+      if (isLegal) {
+        // Fire the server update in the background, don't return its Promise!
+        submitOnlineMove(source, target);
+        // Instantly tell the board the move is visually valid
+        return true; 
+      }
+      return false;
     }
 
+    if (mode === "ai" && g.turn() !== "w") return false;
     const ok = tryMove(source, target);
     if (ok && mode === "ai" && !g.isGameOver()) triggerAiMove();
     return ok;
-  }, [isMyTurn, mode, tryMove, triggerAiMove, submitOnlineMove]);
+  }, [mode, myColor, tryMove, triggerAiMove, submitOnlineMove]);
 
   // ── Online: start game after room is ready ────────────────────────────────
   const startOnlineGame = useCallback((roomState: RoomState, color: "white" | "black") => {
