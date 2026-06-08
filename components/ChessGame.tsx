@@ -289,7 +289,7 @@ export function ChessGame() {
     }
 
     // Case 2: nothing selected — select the piece on this square
-    const piece = g.get(square);
+    const piece = g.get(square as Square);
     if (!piece) return;
     if (piece.color !== g.turn()) return;
     highlightMoves(square);
