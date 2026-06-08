@@ -14,7 +14,7 @@ const STEPS = [
     icon: Sparkles,
     number: "02",
     title: "Earn your trophy",
-    desc: "Win with enough moves and your game qualifies for a tier — Bronze up to the near-impossible Emeritus. Scarcity is earned, never random.",
+    desc: "Win with enough moves and your game qualifies for a tier, Bronze up to the near-impossible Emeritus. Scarcity is earned, never random.",
   },
   {
     icon: Wallet,
@@ -26,7 +26,7 @@ const STEPS = [
     icon: ExternalLink,
     number: "04",
     title: "Own it forever",
-    desc: "Your NFT is transferable, tradeable on Sui markets, and independently verifiable. The replay lives on Walrus — no server required.",
+    desc: "Your NFT is transferable, tradeable on Sui markets, and independently verifiable. The replay lives on Walrus no server required.",
   },
 ];
 

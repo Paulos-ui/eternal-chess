@@ -28,7 +28,7 @@ export function TrophyShowcase() {
           Six tiers. One path.
         </h2>
         <p className="mt-3 text-sm text-ice-frost/60 max-w-md mx-auto">
-          Scarcity earned through skill — not randomness. Every tier is harder than the last.
+          Scarcity earned through skill not randomness. Every tier is harder than the last.
         </p>
       </motion.div>
 
