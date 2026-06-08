@@ -274,7 +274,7 @@ export function ChessGame() {
       }
 
       // Not a legal destination — maybe they're clicking a different friendly piece?
-      const piece = g.get(square);
+      const piece = g.get(square as Square);
       const myPieceColor = g.turn();
       if (piece && piece.color === myPieceColor) {
         // Re-select the new piece
