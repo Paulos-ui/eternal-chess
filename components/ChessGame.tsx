@@ -256,7 +256,7 @@ export function ChessGame() {
       }
 
       // Check if this is a valid destination
-      const legalMoves = g.moves({ square: selectedSquare, verbose: true });
+      const legalMoves = g.moves({ square: selectedSquare as Square, verbose: true });
       const isLegal = legalMoves.some((m) => m.to === square);
 
       if (isLegal) {
