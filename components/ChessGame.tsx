@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
-import { Chess, Square } from "chess.js";
-import { Bot, Users, RotateCcw, Sparkles, Wifi } from "lucide-react";
+import { Chess } from "chess.js";
+import { motion } from "framer-motion";
+import { Bot, Users, RotateCcw, Sparkles, Wifi, Maximize2, Minimize2 } from "lucide-react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { pickAiMove, type Difficulty } from "@/lib/chess-ai";
 import { EternalizeModal } from "./EternalizeModal";
@@ -32,6 +33,7 @@ export function ChessGame() {
   const account = useCurrentAccount();
   const gameRef = useRef(new Chess());
   const boardRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const pusherRef = useRef<Pusher | null>(null);
 
   const [fen, setFen] = useState(gameRef.current.fen());
@@ -39,9 +41,10 @@ export function ChessGame() {
   const [difficulty, setDifficulty] = useState<Difficulty>("easy");
   const [status, setStatus] = useState("Your move — white to play");
   const [finished, setFinished] = useState<FinishedGame | null>(null);
-  const [boardWidth, setBoardWidth] = useState(440);
+  const [boardWidth, setBoardWidth] = useState(480);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Move highlighting
+  // Move highlighting — click-to-move
   const [optionSquares, setOptionSquares] = useState<Record<string, object>>({});
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
 
@@ -51,16 +54,44 @@ export function ChessGame() {
   const [myColor, setMyColor] = useState<"white" | "black">("white");
   const [opponentConnected, setOpponentConnected] = useState(false);
 
-  // Responsive board sizing (Updated to 800px max)
+  // ── Board sizing: responds to container width AND fullscreen ──────────────
   useEffect(() => {
-    const el = boardRef.current?.parentElement;
+    function measure() {
+      if (isFullscreen) {
+        // In fullscreen, fit the board to the viewport height with some padding
+        const size = Math.min(window.innerWidth, window.innerHeight) - 160;
+        setBoardWidth(Math.max(320, size));
+      } else {
+        const el = boardRef.current?.parentElement;
+        if (!el) return;
+        const w = Math.min(el.clientWidth - 28, 600);
+        setBoardWidth(Math.max(300, w));
+      }
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (boardRef.current?.parentElement) ro.observe(boardRef.current.parentElement);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [isFullscreen]);
+
+  // ── Fullscreen API ────────────────────────────────────────────────────────
+  useEffect(() => {
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const w = Math.min(el.clientWidth - 32, 800);
-      setBoardWidth(Math.max(280, w));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+    if (!document.fullscreenElement) {
+      await el.requestFullscreen().catch(() => {});
+    } else {
+      await document.exitFullscreen().catch(() => {});
+    }
   }, []);
 
   // Cleanup Pusher on unmount
@@ -132,27 +163,180 @@ export function ChessGame() {
     return true;
   }, [whiteName, blackName, mode, account]);
 
-  // ── Online: subscribe to Pusher after room is ready ──────────────────────
+  const triggerAiMove = useCallback(() => {
+    const g = gameRef.current;
+    setStatus("Frost Engine is thinking…");
+    setTimeout(() => {
+      const ai = pickAiMove(g.fen(), difficulty);
+      if (ai) {
+        g.move({ from: ai.from, to: ai.to, promotion: ai.promotion });
+        setFen(g.fen());
+        if (!finishIfOver()) computeStatus();
+      }
+    }, 420);
+  }, [difficulty, finishIfOver, computeStatus]);
+
+  const submitOnlineMove = useCallback(async (from: string, to: string) => {
+    if (!room || !account) return false;
+    try {
+      const res = await fetch("/api/room/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: room.code, from, to, promotion: "q", playerAddress: account.address }),
+      });
+      const data = await res.json();
+      if (!res.ok) { console.error(data.error); return false; }
+      const g = gameRef.current;
+      if (data.pgn) g.loadPgn(data.pgn);
+      setFen(g.fen());
+      if (!data.gameOver) computeStatus(g);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [room, account, computeStatus]);
+
+  const tryMove = useCallback((from: string, to: string) => {
+    const g = gameRef.current;
+    try {
+      const mv = g.move({ from, to, promotion: "q" });
+      if (!mv) return false;
+    } catch { return false; }
+    setFen(g.fen());
+    if (!finishIfOver()) computeStatus();
+    return true;
+  }, [computeStatus, finishIfOver]);
+
+  // ── Highlight valid squares for a given piece square ─────────────────────
+  const highlightMoves = useCallback((square: string) => {
+    const g = gameRef.current;
+    const moves = g.moves({ square, verbose: true });
+    if (moves.length === 0) return false;
+    const highlights: Record<string, object> = {};
+    moves.forEach((m) => {
+      highlights[m.to] = {
+        background: g.get(m.to)
+          ? "radial-gradient(circle, rgba(103,232,249,0.6) 80%, transparent 80%)"
+          : "radial-gradient(circle, rgba(103,232,249,0.4) 28%, transparent 28%)",
+        borderRadius: "50%",
+      };
+    });
+    highlights[square] = { background: "rgba(103,232,249,0.22)" };
+    setOptionSquares(highlights);
+    setSelectedSquare(square);
+    return true;
+  }, []);
+
+  // ── Check if it's this player's turn ─────────────────────────────────────
+  const isMyTurn = useCallback(() => {
+    const g = gameRef.current;
+    if (mode === "ai") return g.turn() === "w";
+    if (mode === "online") {
+      return (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
+    }
+    return true; // hotseat: always allowed
+  }, [mode, myColor]);
+
+  // ── onSquareClick: handles BOTH selecting a piece AND moving to a square ──
+  // This is the core of click-to-move. When a square is clicked:
+  //  1. If a piece is already selected and the clicked square is a valid move → move
+  //  2. If the clicked square has a friendly piece → select it (show highlights)
+  //  3. Otherwise → clear selection
+  const onSquareClick = useCallback(async (square: string) => {
+    const g = gameRef.current;
+    if (!isMyTurn()) return;
+
+    // Case 1: a piece is already selected — try to move to this square
+    if (selectedSquare) {
+      // If clicking the same square, deselect
+      if (selectedSquare === square) {
+        setOptionSquares({});
+        setSelectedSquare(null);
+        return;
+      }
+
+      // Check if this is a valid destination
+      const legalMoves = g.moves({ square: selectedSquare, verbose: true });
+      const isLegal = legalMoves.some((m) => m.to === square);
+
+      if (isLegal) {
+        // Execute the move
+        setOptionSquares({});
+        setSelectedSquare(null);
+
+        if (mode === "online") {
+          await submitOnlineMove(selectedSquare, square);
+        } else {
+          const moved = tryMove(selectedSquare, square);
+          if (moved && mode === "ai" && !gameRef.current.isGameOver()) triggerAiMove();
+        }
+        return;
+      }
+
+      // Not a legal destination — maybe they're clicking a different friendly piece?
+      const piece = g.get(square);
+      const myPieceColor = g.turn();
+      if (piece && piece.color === myPieceColor) {
+        // Re-select the new piece
+        highlightMoves(square);
+        return;
+      }
+
+      // Clicked empty/enemy non-capture — clear selection
+      setOptionSquares({});
+      setSelectedSquare(null);
+      return;
+    }
+
+    // Case 2: nothing selected — select the piece on this square
+    const piece = g.get(square);
+    if (!piece) return;
+    if (piece.color !== g.turn()) return;
+    highlightMoves(square);
+  }, [selectedSquare, isMyTurn, mode, tryMove, triggerAiMove, submitOnlineMove, highlightMoves]);
+
+  // ── onPieceClick: triggers the same selection logic as onSquareClick ──────
+  // react-chessboard fires onPieceClick before onSquareClick, so we let
+  // onSquareClick handle everything — this just prevents double-firing.
+  const onPieceClick = useCallback((_piece: string, square: string) => {
+    // Handled entirely by onSquareClick — no-op here to avoid duplicate calls
+  }, []);
+
+  // ── Drag and drop still works alongside click-to-move ────────────────────
+  const onPieceDrop = useCallback(async (source: string, target: string) => {
+    const g = gameRef.current;
+    setOptionSquares({});
+    setSelectedSquare(null);
+
+    if (!isMyTurn()) return false;
+
+    if (mode === "online") {
+      const ok = await submitOnlineMove(source, target);
+      return ok ?? false;
+    }
+
+    const ok = tryMove(source, target);
+    if (ok && mode === "ai" && !g.isGameOver()) triggerAiMove();
+    return ok;
+  }, [isMyTurn, mode, tryMove, triggerAiMove, submitOnlineMove]);
+
+  // ── Online: start game after room is ready ────────────────────────────────
   const startOnlineGame = useCallback((roomState: RoomState, color: "white" | "black") => {
     setRoom(roomState);
     setMyColor(color);
     setShowLobby(false);
     setOpponentConnected(true);
-
     gameRef.current = new Chess();
     setFen(gameRef.current.fen());
     setFinished(null);
     setOptionSquares({});
     setSelectedSquare(null);
-
-    const isWhite = color === "white";
-    setStatus(isWhite ? "Your turn" : "Opponent's turn…");
+    setStatus(color === "white" ? "Your turn" : "Opponent's turn…");
 
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
     });
     pusherRef.current = pusher;
-
     const ch = pusher.subscribe(roomChannel(roomState.code));
 
     ch.bind("move_made", (event: any) => {
@@ -179,133 +363,12 @@ export function ChessGame() {
         white: roomState.hostAddress,
         black: roomState.guestAddress ?? "Opponent",
         isOnlineWin: isWinner,
+        isOnline: true,
       });
       setStatus(event.resultLabel);
       pusher.unsubscribe(roomChannel(roomState.code));
     });
   }, [computeStatus, account]);
-
-  // ── Trigger AI move ───────────────────────────────────────────────────────
-  const triggerAiMove = useCallback(() => {
-    const g = gameRef.current;
-    setStatus("Frost Engine is thinking…");
-    setTimeout(() => {
-      const ai = pickAiMove(g.fen(), difficulty);
-      if (ai) {
-        g.move({ from: ai.from, to: ai.to, promotion: ai.promotion });
-        setFen(g.fen());
-        if (!finishIfOver()) computeStatus();
-      }
-    }, 420);
-  }, [difficulty, finishIfOver, computeStatus]);
-
-  // ── Submit move to server (online mode) ──────────────────────────────────
-  const submitOnlineMove = useCallback(async (from: string, to: string) => {
-    if (!room || !account) return false;
-    try {
-      const res = await fetch("/api/room/move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: room.code, from, to, promotion: "q", playerAddress: account.address }),
-      });
-      const data = await res.json();
-      if (!res.ok) { console.error(data.error); return false; }
-      
-      const g = gameRef.current;
-      if (data.pgn) g.loadPgn(data.pgn);
-      setFen(g.fen());
-      if (!data.gameOver) computeStatus(g);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [room, account, computeStatus]);
-
-  // ── tryMove (local) ───────────────────────────────────────────────────────
-  const tryMove = useCallback((from: string, to: string) => {
-    const g = gameRef.current;
-    try {
-      const mv = g.move({ from, to, promotion: "q" });
-      if (!mv) return false;
-    } catch { return false; }
-    setFen(g.fen());
-    if (!finishIfOver()) computeStatus();
-    return true;
-  }, [computeStatus, finishIfOver]);
-
-  // ── Show valid squares (Click or Drag) ───────────────────────────────────
-  const showHighlights = useCallback((square: string) => {
-    const g = gameRef.current;
-    if (mode === "ai" && g.turn() !== "w") return;
-    if (mode === "online") {
-      const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
-      if (!myTurn) return;
-    }
-    const moves = g.moves({ square: square as Square, verbose: true });
-    if (moves.length === 0) { setOptionSquares({}); setSelectedSquare(null); return; }
-    
-    setSelectedSquare(square);
-    const highlights: Record<string, object> = {};
-    moves.forEach((m) => {
-      highlights[m.to] = {
-        background: g.get(m.to as Square)
-          ? "radial-gradient(circle, rgba(255,255,255,0.7) 80%, transparent 80%)"
-          : "radial-gradient(circle, rgba(255,255,255,0.3) 25%, transparent 25%)",
-        borderRadius: "50%",
-      };
-    });
-    highlights[square] = { background: "rgba(255,255,255,0.2)" };
-    setOptionSquares(highlights);
-  }, [mode, myColor]);
-
-  const onPieceClick = useCallback((piece: string, square: string) => showHighlights(square), [showHighlights]);
-  const onPieceDragBegin = useCallback((piece: string, sourceSquare: string) => showHighlights(sourceSquare), [showHighlights]);
-
-  // ── Square click → complete move ─────────────────────────────────────────
-  const onSquareClick = useCallback((square: string) => {
-    if (!selectedSquare || selectedSquare === square) {
-      setOptionSquares({}); setSelectedSquare(null); return;
-    }
-    setOptionSquares({}); setSelectedSquare(null);
-
-    if (mode === "online") {
-      const g = gameRef.current;
-      const legalMoves = g.moves({ square: selectedSquare as Square, verbose: true });
-      const isLegal = legalMoves.some((m) => m.to === square);
-      if (!isLegal) return;
-      submitOnlineMove(selectedSquare, square);
-      return;
-    }
-
-    const moved = tryMove(selectedSquare, square);
-    if (moved && mode === "ai" && !gameRef.current.isGameOver()) triggerAiMove();
-  }, [selectedSquare, tryMove, mode, triggerAiMove, submitOnlineMove]);
-
-  // ── Piece drop ────────────────────────────────────────────────────────────
-  const onPieceDrop = useCallback((source: Square, target: Square) => {
-    const g = gameRef.current;
-    setOptionSquares({}); 
-    setSelectedSquare(null);
-
-    if (mode === "online") {
-      const myTurn = (g.turn() === "w" && myColor === "white") || (g.turn() === "b" && myColor === "black");
-      if (!myTurn) return false;
-
-      const legalMoves = g.moves({ square: source, verbose: true });
-      const isLegal = legalMoves.some((m) => m.to === target);
-
-      if (isLegal) {
-        submitOnlineMove(source, target);
-        return true;
-      }
-      return false;
-    }
-
-    if (mode === "ai" && g.turn() !== "w") return false;
-    const ok = tryMove(source, target);
-    if (ok && mode === "ai" && !g.isGameOver()) triggerAiMove();
-    return ok;
-  }, [mode, myColor, tryMove, triggerAiMove, submitOnlineMove]);
 
   // ── Reset ────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
@@ -330,8 +393,10 @@ export function ChessGame() {
 
   return (
     <div className="flex w-full flex-col items-center gap-5">
-      {/* Mode bar */}
-      <div className="flex w-full max-w-[800px] flex-wrap items-center justify-between gap-3">
+
+      {/* ── Controls bar ─────────────────────────────────────────────────── */}
+      <div className="flex w-full max-w-[640px] flex-wrap items-center justify-between gap-3">
+        {/* Mode selector */}
         <div className="flex rounded-xl glass p-1">
           <ModeBtn active={mode === "ai"} onClick={() => switchMode("ai")}>
             <Bot className="h-4 w-4" /> vs AI
@@ -344,6 +409,7 @@ export function ChessGame() {
           </ModeBtn>
         </div>
 
+        {/* Difficulty — AI mode only */}
         {mode === "ai" && (
           <div className="flex rounded-xl glass p-1">
             {(["easy", "medium", "hard"] as Difficulty[]).map((d) => (
@@ -360,6 +426,7 @@ export function ChessGame() {
           </div>
         )}
 
+        {/* Online room code badge */}
         {mode === "online" && room && (
           <div className="flex items-center gap-2 rounded-xl glass px-3 py-2">
             <span className="font-display text-xs text-ice-frost/50 tracking-widest uppercase">Room</span>
@@ -367,12 +434,27 @@ export function ChessGame() {
           </div>
         )}
 
-        <button
-          onClick={reset}
-          className="flex items-center gap-2 rounded-xl glass px-4 py-2 font-display text-sm tracking-wide text-ice-frost/80 hover:text-ice hover:shadow-ice"
-        >
-          <RotateCcw className="h-4 w-4" /> New game
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Fullscreen toggle */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            className="flex items-center gap-1.5 rounded-xl glass px-3 py-2 font-display text-sm tracking-wide text-ice-frost/60 hover:text-ice hover:shadow-ice transition"
+          >
+            {isFullscreen
+              ? <Minimize2 className="h-4 w-4" />
+              : <Maximize2 className="h-4 w-4" />
+            }
+          </button>
+
+          {/* New game */}
+          <button
+            onClick={reset}
+            className="flex items-center gap-2 rounded-xl glass px-4 py-2 font-display text-sm tracking-wide text-ice-frost/80 hover:text-ice hover:shadow-ice transition"
+          >
+            <RotateCcw className="h-4 w-4" /> New game
+          </button>
+        </div>
       </div>
 
       {/* Online lobby */}
@@ -380,11 +462,12 @@ export function ChessGame() {
         <OnlineRoom onReady={startOnlineGame} />
       )}
 
-      {/* Board */}
-      {(!showLobby || (mode !== "online")) && (
+      {/* ── Board area ───────────────────────────────────────────────────── */}
+      {(!showLobby || mode !== "online") && (
         <>
+          {/* Online opponent strip */}
           {mode === "online" && room && (
-            <div className="flex w-full max-w-[800px] items-center justify-between rounded-xl glass px-4 py-2">
+            <div className="flex w-full max-w-[640px] items-center justify-between rounded-xl glass px-4 py-2">
               <PlayerTag
                 address={myColor === "white" ? room.hostAddress : room.guestAddress ?? "?"}
                 label="You"
@@ -399,35 +482,80 @@ export function ChessGame() {
             </div>
           )}
 
-          <div className="board-frame w-full flex justify-center">
-            <div ref={boardRef} className="w-full max-w-[800px]">
-              <Chessboard
-                position={fen}
-                onPieceDrop={onPieceDrop}
-                onPieceClick={onPieceClick}
-                onPieceDragBegin={onPieceDragBegin}
-                onSquareClick={onSquareClick}
-                boardOrientation={boardOrientation}
-                boardWidth={boardWidth}
-                animationDuration={250}
-                customBoardStyle={{ borderRadius: "10px" }}
-                customDarkSquareStyle={{ backgroundColor: "#0e2a3a" }}
-                customLightSquareStyle={{ backgroundColor: "#16415a" }}
-                customDropSquareStyle={{ boxShadow: "inset 0 0 0 3px rgba(255,255,255,0.9)" }}
-                customSquareStyles={optionSquares}
-              />
-            </div>
-          </div>
+          {/* Click-to-move hint */}
+          {!isFullscreen && (
+            <p className="text-xs text-ice-frost/35 font-display tracking-widest">
+              Click a piece to select · click a destination to move · or drag
+            </p>
+          )}
 
-          <p className="font-display text-sm tracking-widest text-ice-frost/70">{status}</p>
+          {/* Board container — fullscreen target */}
+          <div
+            ref={containerRef}
+            className={`relative flex flex-col items-center justify-center gap-4 ${
+              isFullscreen
+                ? "w-screen h-screen bg-[#05070f]"
+                : ""
+            }`}
+          >
+            {/* Fullscreen controls overlay */}
+            {isFullscreen && (
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+                <span className="font-display text-xs text-ice-frost/40 tracking-widest">{status}</span>
+                <button
+                  onClick={reset}
+                  className="flex items-center gap-1.5 rounded-xl glass px-3 py-2 text-xs text-ice-frost/70 hover:text-ice transition"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> New
+                </button>
+                <button
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 rounded-xl glass px-3 py-2 text-xs text-ice-frost/70 hover:text-ice transition"
+                >
+                  <Minimize2 className="h-3.5 w-3.5" /> Exit
+                </button>
+              </div>
+            )}
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="board-frame"
+            >
+              <div ref={boardRef}>
+                <Chessboard
+                  position={fen}
+                  onPieceDrop={onPieceDrop}
+                  onPieceClick={onPieceClick}
+                  onSquareClick={onSquareClick}
+                  boardOrientation={boardOrientation}
+                  boardWidth={boardWidth}
+                  animationDuration={220}
+                  customBoardStyle={{ borderRadius: "10px" }}
+                  customDarkSquareStyle={{ backgroundColor: "#0e2a3a" }}
+                  customLightSquareStyle={{ backgroundColor: "#16415a" }}
+                  customDropSquareStyle={{ boxShadow: "inset 0 0 0 3px rgba(103,232,249,0.9)" }}
+                  customSquareStyles={optionSquares}
+                />
+              </div>
+            </motion.div>
+
+            {/* Status — shown inside fullscreen too */}
+            {!isFullscreen && (
+              <p className="font-display text-sm tracking-widest text-ice-frost/70">{status}</p>
+            )}
+          </div>
 
           {finished && (
             <button
               onClick={() => {
-                const el = document.getElementById("eternalize-anchor");
-                el?.scrollIntoView({ behavior: "smooth" });
+                if (isFullscreen) document.exitFullscreen().catch(() => {});
+                setTimeout(() => {
+                  document.getElementById("eternalize-anchor")?.scrollIntoView({ behavior: "smooth" });
+                }, 300);
               }}
-              className="flex items-center gap-2 rounded-xl bg-ice/90 px-5 py-2.5 font-display font-semibold tracking-wide text-void-900 shadow-ice-lg hover:bg-ice"
+              className="flex items-center gap-2 rounded-xl bg-ice/90 px-5 py-2.5 font-display font-semibold tracking-wide text-void-900 shadow-ice-lg hover:bg-ice transition"
             >
               <Sparkles className="h-4 w-4" />
               {finished.isOnlineWin ? "🏆 You won! Eternalize it" : "Game over — eternalize it"}

@@ -46,7 +46,7 @@ export function Footer() {
             </span>
           </div>
           <p className="text-sm text-ice-frost/50 leading-relaxed">
-            Play. Eternalize. Own history forever. Every win minted as a Sui NFT, stored on Walrus — no servers, no takedowns.
+            Play. Eternalize. Own history forever. Every win minted as a Sui NFT, stored on Walrus no servers, no takedowns.
           </p>
           <div className="flex gap-3 mt-5">
             <a
