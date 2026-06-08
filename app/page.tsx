@@ -58,7 +58,7 @@ export default function Home() {
             className="mx-auto mt-5 max-w-xl text-base text-ice-frost/70"
           >
             Every finished game becomes a permanent, verifiable Sui object whose
-            full replay — board, moves, and PGN — lives forever as decentralized
+            full replay board, moves, and PGN lives forever as decentralized
             Walrus blobs. No servers. No takedowns. Just eternity.
           </motion.p>
 
@@ -111,10 +111,10 @@ export default function Home() {
         <div className="mx-auto mt-20 grid max-w-4xl gap-4 sm:grid-cols-3">
           <Feature icon={Database} title="Stored on Walrus">
             PGN, final board, and full move JSON are written as content-addressed
-            blobs — the NFT image literally points at a Walrus blob.
+            blobs  the NFT image literally points at a Walrus blob.
           </Feature>
           <Feature icon={ShieldCheck} title="Proven on Sui">
-            Each game mints an on-chain object via Tatum&apos;s Sui RPC, binding
+            Each game mints an on chain object via Tatum&apos;s Sui RPC, binding
             your blobs to a verifiable, ownable record.
           </Feature>
           <Feature icon={Wifi} title="Play online">
