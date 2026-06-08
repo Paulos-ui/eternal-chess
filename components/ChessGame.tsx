@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
-import { Chess } from "chess.js";
+import { Chess, Square } from "chess.js";
 import { motion } from "framer-motion";
 import { Bot, Users, RotateCcw, Sparkles, Wifi, Maximize2, Minimize2 } from "lucide-react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { pickAiMove, type Difficulty } from "@/lib/chess-ai";
 import { EternalizeModal } from "./EternalizeModal";
-import { OnlineRoom } from "./OnlineRoom";
+import { OnlineRoom } from "./OnlineRoom"; 
 import type { RoomState } from "@/lib/room";
 import { roomChannel } from "@/lib/room";
 import Pusher from "pusher-js";
@@ -210,13 +210,13 @@ export function ChessGame() {
   // ── Highlight valid squares for a given piece square ─────────────────────
   const highlightMoves = useCallback((square: string) => {
     const g = gameRef.current;
-    const moves = g.moves({ square, verbose: true });
+    const moves = g.moves({ square: square as Square, verbose: true });
     if (moves.length === 0) return false;
     const highlights: Record<string, object> = {};
     moves.forEach((m) => {
       highlights[m.to] = {
         background: g.get(m.to)
-          ? "radial-gradient(circle, rgba(103,232,249,0.6) 80%, transparent 80%)"
+          ? "radial-gradient(circle, rgba(228, 228, 228, 0.6) 80%, transparent 80%)"
           : "radial-gradient(circle, rgba(103,232,249,0.4) 28%, transparent 28%)",
         borderRadius: "50%",
       };
