@@ -95,3 +95,33 @@ button { cursor: pointer; }
   background: rgba(34, 211, 238, 0.3);
   border-radius: 9999px;
 }
+
+/* ── Add these to the bottom of your globals.css ────────────────────────── */
+
+/* Live ticker scroll animation */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-ticker {
+  animation: ticker 32s linear infinite;
+}
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
+/* Shadow ice variants */
+.shadow-ice-lg {
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.3),
+    0 8px 32px -8px rgba(34, 211, 238, 0.5);
+}
+
+/* Void color for button text */
+.text-void-900 { color: #05070f; }
+
+/* Scroll smooth */
+html { scroll-behavior: smooth; }
+
+/* Chess background canvas sits behind everything */
+canvas.fixed { isolation: isolate; }
